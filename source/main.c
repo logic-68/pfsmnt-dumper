@@ -1,7 +1,7 @@
 #include <resolve.h>
 #include <debug.h>
 
-#define VERSION "1.0.0b"
+#define VERSION "1.0.0 b"
 #define DEBUG_SOCKET
 #define DEBUG_ADDR IP(192, 168, 1, 155);
 #define DEBUG_PORT 5655
