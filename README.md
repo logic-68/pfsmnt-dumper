@@ -1,5 +1,7 @@
 # pfsmnt-dumper
 dump app0 / patch0 if exist
+
+Dumper raw data pfsmnt/title_id-app0 and pfsmnt/title_id-patch0
 # version
 Bêta 1.0.0
 
