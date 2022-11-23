@@ -1,7 +1,8 @@
-# enable-desable-UDP-PS5
-Enable/desable Updates PS5 v1.0.1
+# pfsmnt-dumper
+dump app0 / patch0 if exist
+# version
+Bêta 1.0.0
 
-Simple portage of Enable/desable Updates from the PS4 collective scene
 
 # Credits
 - [PS5Dev](https://github.com/PS5Dev) 
