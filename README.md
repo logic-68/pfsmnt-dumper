@@ -11,6 +11,6 @@ Bêta 1.0.0
 
 # required
 Ubuntu 20.10
-Clang 15
+Clang 11
 cmake >= 3.20 (my v3.24.2)
 
