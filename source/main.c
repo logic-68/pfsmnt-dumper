@@ -6,14 +6,6 @@
 #define DEBUG_ADDR IP(192, 168, 1, 155);
 #define DEBUG_PORT 5655
 
-void touch_file(char *destfile)
-{
-	int fd = f_open(destfile, O_WRONLY | O_CREAT | O_TRUNC, 0777);
-	if (fd != -1)
-		f_close(fd);
-}
-
-
 int sock;
 int nthread_run;
 int xfer_pct;
@@ -45,6 +37,12 @@ void printf_notification(const char *fmt, ...)
 	f_strcpy(noti_buffer.uri, "cxml://user/data/notifi/setting.png");
 
 	f_sceKernelSendNotificationRequest(0, (SceNotificationRequest *)&noti_buffer, sizeof(noti_buffer), 0);
+}
+void touch_file(char *destfile)
+{
+	int fd = f_open(destfile, O_WRONLY | O_CREAT | O_TRUNC, 0777);
+	if (fd != -1)
+		f_close(fd);
 }
 int file_exists(char *fname)
 {
