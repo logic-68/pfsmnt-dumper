@@ -12,7 +12,7 @@ Bêta 1.0.0
 - [@notzecoxao](https://twitter.com/notzecoxao)
 
 # required
-Ubuntu 20.10
-Clang 11
-cmake >= 3.20 (my v3.24.2)
+Ubuntu 20.04
+Clang-10
+
 
