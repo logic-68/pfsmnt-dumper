@@ -1,167 +1,55 @@
-#include <resolve.h>
-#include <debug.h>
+#include <utils.h>
 
-#define VERSION "1.0.0b"
+#define VERSION "1.0.3b"
 #define DEBUG_SOCKET
 #define DEBUG_ADDR IP(192, 168, 1, 155);
 #define DEBUG_PORT 5655
+#define INIT_FILE "conf.ini"
+#define ERROR_FILE "log_error.txt"
+#define SANDBOX "/mnt/sandbox/pfsmnt"
+#define OCT_TO_GO / 1024 / 1024 / 1024
 
 int sock;
-int nthread_run;
-int xfer_pct;
-char *cfile;
-int isxfer;
-int folders;
-int files;
-size_t total_size_folder = 0;
-// int nb_folder_copied = 0;
-// int nb_file_copied = 0;
-size_t progress = 0;
-char dir_curent[64];
-int progress_total_by_folder;
+int nthread_run, nthread_run_delete, folders, files, tmp_folders, tmp_files;
+int tmpcnt, isxfer, isdel, xfer_pct;
+long xfer_speed;
+size_t folder_size_current, tmp_bytes_copied, total_bytes_copied, tmp_total_bytes_copied;
+char dir_current[64], current_copied[64];
+char *cfile, error_file_path[256];
 
-// https://github.com/OSM-Made/PS4-Notify
-void printf_notification(const char *fmt, ...)
+void copy_file(char *src_path, char *dst_path, char *name)
 {
-	SceNotificationRequest noti_buffer;
-
-	va_list args;
-	va_start(args, fmt);
-	f_vsprintf(noti_buffer.message, fmt, args);
-	va_end(args);
-
-	noti_buffer.type = 0;
-	noti_buffer.unk3 = 0;
-	noti_buffer.use_icon_image_uri = 1;
-	noti_buffer.target_id = -1;
-	f_strcpy(noti_buffer.uri, "cxml://user/data/notifi/setting.png");
-
-	f_sceKernelSendNotificationRequest(0, (SceNotificationRequest *)&noti_buffer, sizeof(noti_buffer), 0);
-}
-void touch_file(char *destfile)
-{
-	int fd = f_open(destfile, O_WRONLY | O_CREAT | O_TRUNC, 0777);
-	if (fd != -1)
-		f_close(fd);
-}
-int file_exists(char *fname)
-{
-	FILE *file = f_fopen(fname, "rb");
-	if (file)
-	{
-		f_fclose(file);
-		return 1;
-	}
-	return 0;
-}
-
-void size_file(char addr[1024])
-{
-	FILE *fichier;
-	size_t size = 0;
-	fichier = f_fopen(addr, "rb");
-
-	if (fichier)
-	{
-		f_fseek(fichier, 0, SEEK_END);
-		size = f_ftell(fichier);
-		total_size_folder += size;
-		printfsocket("[OPEN ADD SIZE FILE] %lu Octets\n", size);
-		f_fclose(fichier);
-	}
-	else
-	{
-		printfsocket("[ERROR] %s\n\n", addr);
-	}
-	return;
-}
-void check_folder_size(char *sourcedir)
-{
-	DIR *dir = f_opendir(sourcedir);
-	struct dirent *dp;
-	struct stat info;
-	char src_path[1024];
-
-	if (!dir)
-	{
-		return;
-	}
-
-	while ((dp = f_readdir(dir)) != NULL)
-	{
-		if (!f_strcmp(dp->d_name, ".") || !f_strcmp(dp->d_name, ".."))
-		{
-			continue;
-		}
-		else
-		{
-			f_sprintf(src_path, "%s/%s", sourcedir, dp->d_name);
-			if (!f_stat(src_path, &info))
-			{
-				if (S_ISDIR(info.st_mode))
-				{
-					folders++;
-					check_folder_size(src_path);
-				}
-				else if (S_ISREG(info.st_mode))
-				{
-					files++;
-					size_file(src_path);
-				}
-			}
-		}
-	}
-	f_closedir(dir);
-}
-void copy_file(char *sourcefile, char *destfile)
-{
-	int src = f_open(sourcefile, O_RDONLY, 0);
-
+	int src = f_open(src_path, O_RDONLY, 0);
 	if (src != -1)
 	{
-		int out = f_open(destfile, O_WRONLY | O_CREAT | O_TRUNC, 0777);
+		int out = f_open(dst_path, O_WRONLY | O_CREAT | O_TRUNC, 0777);
 		if (out != -1)
 		{
-			cfile = sourcefile;
+			cfile = src_path;
 			isxfer = 1;
-
-			char *buffer = f_malloc(4194304);
+			char *buffer = f_malloc(1024 * 64 * 64);
+			size_t bytes, bytes_size, bytes_copied = 0;
 			if (buffer != NULL)
 			{
-				size_t bytes, bytes_size, bytes_copied = 0;
-
 				f_lseek(src, 0L, SEEK_END);
 				bytes_size = f_lseek(src, 0, SEEK_CUR);
 				f_lseek(src, 0L, SEEK_SET);
-
-				while ((bytes = f_read(src, buffer, 4194304)) > 0)
+				while ((bytes = f_read(src, buffer, 1024 * 64 * 64)) > 0)
 				{
 					f_write(out, buffer, bytes);
 					bytes_copied += bytes;
-
 					if (bytes_copied > bytes_size)
-					{
 						bytes_copied = bytes_size;
-					}
+
+					tmp_bytes_copied = bytes_copied;
+					total_bytes_copied = tmp_total_bytes_copied + bytes_copied;
+					xfer_speed += bytes;
 					xfer_pct = bytes_copied * 100 / bytes_size;
-					printfsocket("Copy of: %s | %i%%\n", cfile, xfer_pct);
-
-					if (bytes_size > 1073741824) // 1Go
-					{
-						progress += bytes_copied;
-						f_sprintf(dir_curent, "%s", cfile);
-						progress_total_by_folder = xfer_pct;
-
-					}
+					printfsocket("Copy of: %s | %i%% \n", cfile, xfer_pct);
 				}
-				if (bytes_size < 1073741824) // 1Go
-				{
-					progress += bytes_copied;
-					progress_total_by_folder = progress * 100 / total_size_folder;
-
-					printfsocket("Total Progress | %i%% \n", progress_total_by_folder);
-				}
-
+				tmp_total_bytes_copied = tmp_total_bytes_copied + tmp_bytes_copied;
+				total_bytes_copied = tmp_total_bytes_copied;
+				printfsocket("[Total Progress] %i%% \n", total_bytes_copied * 100 / folder_size_current);
 				f_free(buffer);
 			}
 			f_close(out);
@@ -172,41 +60,86 @@ void copy_file(char *sourcefile, char *destfile)
 	}
 }
 
-void copy_dir(char *sourcedir, char *destdir)
+void copy_dir_current(char *dir_current, char *out_dir_current, char (*ignored_lang)[3])
 {
-	DIR *dir = f_opendir(sourcedir);
+	DIR *dir = f_opendir(dir_current);
 	struct dirent *dp;
 	struct stat info;
-	char src_path[1024];
-	char dst_path[1024];
-
+	char src_path[1024], dst_path[1024], error[1024];
+	int attempt, hasfound_lang = 0;
 	if (!dir)
 	{
 		return;
 	}
-	f_mkdir(destdir, 0777);
-
-	while ((dp = f_readdir(dir)) != NULL)
+	f_mkdir(out_dir_current, 0777);
+	if (dir_exists(out_dir_current))
 	{
-		if (!f_strcmp(dp->d_name, ".") || !f_strcmp(dp->d_name, ".."))
+		while ((dp = f_readdir(dir)) != NULL)
 		{
-			continue;
-		}
-		else
-		{
-			f_sprintf(src_path, "%s/%s", sourcedir, dp->d_name);
-			f_sprintf(dst_path, "%s/%s", destdir, dp->d_name);
-
-			if (!f_stat(src_path, &info))
+			if (!f_strcmp(dp->d_name, ".") || !f_strcmp(dp->d_name, ".."))
 			{
-				if (S_ISDIR(info.st_mode))
-				{
+				continue;
+			}
+			else
+			{
+				f_sprintf(src_path, "%s/%s", dir_current, dp->d_name);
+				f_sprintf(dst_path, "%s/%s", out_dir_current, dp->d_name);
 
-					copy_dir(src_path, dst_path);
-				}
-				else if (S_ISREG(info.st_mode))
+				if (!f_stat(src_path, &info))
 				{
-					copy_file(src_path, dst_path);
+					if (S_ISDIR(info.st_mode))
+					{
+						tmp_folders++;
+						copy_dir_current(src_path, dst_path, ignored_lang);
+					}
+					else if (S_ISREG(info.st_mode))
+					{
+						// Check extention file
+						char *lastDotPos = f_strrchr(src_path, '.');
+						if (lastDotPos != NULL)
+						{
+							int i;
+							// browse the languages ​​to be ignored
+							for (i = 0; i < 16; i++)
+							{
+								if (!f_strcmp(ignored_lang[i], lastDotPos + 1))
+								{
+									f_sprintf(error, "\n[FILE LANGUE IGNORE]%s\n", src_path);
+									write_error(error_file_path, error);
+									hasfound_lang = 0;
+									continue;
+								}
+							}
+							// if the language extension is not to be ignored
+							if (hasfound_lang != 0)
+								copy_file(src_path, dst_path, dp->d_name);
+						}
+						// if no extension
+						else
+							copy_file(src_path, dst_path, dp->d_name);
+						if (file_compare(src_path, dst_path))
+							tmp_files++;
+						else
+						{
+							if (!file_compare(src_path, dst_path) && attempt == 0)
+							{
+								total_bytes_copied = (tmp_total_bytes_copied - tmp_bytes_copied);
+								f_sprintf(error, "[ATTEMPT TO WRITE FILE] because file do not match ->  %s\n", dst_path);
+								printfsocket(error);
+								write_error(error_file_path, error);
+								attempt = 1;
+								copy_file(src_path, dst_path, dp->d_name);
+							}
+
+							if (!file_compare(src_path, dst_path) && attempt == 1)
+							{
+								f_sprintf(error, "[REWRITE ATTEMPT FAILED] Maybe more free space on your usb drive?.\n[FILE IGNORE] -> %s\n\n", src_path);
+								printfsocket(error);
+								write_error(error_file_path, error);
+								attempt = 0;
+							}
+						}
+					}
 				}
 			}
 		}
@@ -214,57 +147,143 @@ void copy_dir(char *sourcedir, char *destdir)
 	f_closedir(dir);
 }
 
-int wait_for_usb(char *usb_name, char *usb_path)
+// calcul the size of a file and increments the size of the current folder
+void size_file(char addr[1024])
 {
-	char probe[64];
-	f_sprintf(probe, "%s", "/mnt/usb0/.probe");
-	touch_file(probe);
-
-	if (!file_exists(probe))
+	FILE *file;
+	size_t size = 0;
+	file = f_fopen(addr, "rb");
+	if (file)
 	{
-		printfsocket("Usb Not Found\n");
-		return 0;
+		f_fseek(file, 0, SEEK_END);
+		size = f_ftell(file);
+		// increment the size of the current folder
+		folder_size_current += size;
+		printfsocket("[OPEN AND CALCUL SIZE] %s | %lu Octets\n", addr, size);
+		f_fclose(file);
+	}
+}
+
+// calculate the total size of the current folder
+void check_size_folder_current(char *dir_current, char (*ignored_lang)[3])
+{
+	DIR *dir = f_opendir(dir_current);
+	struct dirent *dp;
+	struct stat info;
+	char src_file[1024], error[1024];
+	int hasfound_lang = -1;
+
+	if (!dir)
+		return;
+	while ((dp = f_readdir(dir)) != NULL)
+	{
+		if (!f_strcmp(dp->d_name, ".") || !f_strcmp(dp->d_name, ".."))
+			continue;
+		else
+		{
+			f_sprintf(src_file, "%s/%s", dir_current, dp->d_name);
+			if (!f_stat(src_file, &info))
+			{
+				if (S_ISDIR(info.st_mode))
+				{
+					folders++;
+					check_size_folder_current(src_file, ignored_lang);
+				}
+				else if (S_ISREG(info.st_mode))
+				{
+
+					// Check extention file
+					char *lastDotPos = f_strrchr(src_file, '.');
+					if (lastDotPos != NULL)
+					{
+						int i;
+						// browse the languages ​​to be ignored
+						for (i = 0; i < 16; i++)
+						{
+							if (!f_strcmp(ignored_lang[i], lastDotPos + 1))
+							{
+								f_sprintf(error, "[FILE IGNORE]%s\n", src_file);
+								write_error(error_file_path, error);
+								hasfound_lang = 0;
+								continue;
+							}
+						} // if the language extension is not to be ignored
+						if (hasfound_lang != 0)
+						{
+							files++;
+							size_file(src_file);
+						}
+					} // if no extension
+					else
+					{
+						files++;
+						size_file(src_file);
+					}
+				}
+			}
+		}
+		hasfound_lang = -1;
+	}
+	f_closedir(dir);
+}
+void check_current_folder(char *dir_current, char (*ignored_lang)[3])
+{
+	printfsocket("\n[CALCUL CURRENT FOLDER] -> %s\n", dir_current);
+	printf_notification("Calcul size of:\n\n %s", dir_current);
+	f_sceKernelSleep(7);
+	check_size_folder_current(dir_current, ignored_lang);
+	printfsocket("\n[FOLDER CONTENT] %s | FOLDER = %d | FILES = %ld | Size = %lu Octets | %.2f Go\n\n", dir_current, folders, files, folder_size_current, (double)folder_size_current OCT_TO_GO);
+	printf_notification("Size of:\n\n%s\n%.2f Go", dir_current, (double)folder_size_current OCT_TO_GO);
+	f_sceKernelSleep(7);
+}
+
+int copy_verification(char *out_dir_current)
+{
+	folders = 0;
+	files = 0;
+	printfsocket("\n[OUT FOLDER CONTENT] %s | FOLDER = %d | FILES = %ld | Size = %lu/%lu Octets | %.2f/%.2f Go\n\n", out_dir_current, tmp_folders, tmp_files, total_bytes_copied, folder_size_current, (double)total_bytes_copied OCT_TO_GO, (double)folder_size_current OCT_TO_GO);
+	if (total_bytes_copied == folder_size_current)
+	{
+		printfsocket("[COPY SUCCESSFULLY]\n");
+		printf_notification("Copy of:\n%s\nSuccessfully!\n%.2f Go", out_dir_current, (double)folder_size_current OCT_TO_GO);
+		f_sceKernelSleep(7);
+		return 1;
 	}
 	else
 	{
-		f_unlink(probe);
-		f_sprintf(usb_name, "%s", "usb0");
-		f_sprintf(usb_path, "%s", "/mnt");
-		printfsocket("Usb Found\n");
-
-		return 1;
-	}
-}
-
-int wait_for_game(char *title_id)
-{
-	int res = 0;
-
-	DIR *dir;
-	struct dirent *dp;
-
-	dir = f_opendir("/mnt/sandbox/pfsmnt");
-	if (!dir)
-	{
-		printfsocket("No game launch\n");
+		printfsocket("[ERROR WHILE COPYING]\n");
+		printf_notification("Error while copying\nCheck the error.txt file on USB");
+		f_sceKernelSleep(7);
 		return 0;
 	}
-
-	while ((dp = f_readdir(dir)) != NULL)
-	{
-		if (f_strstr(dp->d_name, "-app0") != NULL)
-		{
-			f_sscanf(dp->d_name, "%[^-]", title_id);
-			printfsocket("Game %s start\n", title_id);
-			res = 1;
-			break;
-		}
-	}
-	f_closedir(dir);
-
-	return res;
+	tmp_folders = 0;
+	tmp_files = 0;
+	folder_size_current = 0;
 }
+void *nthread_delete(void *arg)
+{
+	UNUSED(arg);
+	time_t t1, t2;
+	t1 = 0;
+	while (nthread_run_delete)
+	{
+		if (isdel)
+		{
+			t2 = f_time(NULL);
+			if ((t2 - t1) >= 7)
+			{
+				t1 = t2;
+				printf_notification("Deletion in progress please wait...");
+			}
+		}
+		else
+			t1 = 0;
 
+		f_sceKernelSleep(5);
+	}
+
+	return NULL;
+}
 void *nthread_func(void *arg)
 {
 	UNUSED(arg);
@@ -278,18 +297,38 @@ void *nthread_func(void *arg)
 			if ((t2 - t1) >= 20)
 			{
 				t1 = t2;
-				printf_notification("Copy %s \nProgress:  %i%%", dir_curent, progress_total_by_folder);
+				if (tmpcnt >= 1048576)
+					printf_notification("Copy of:\n%s \nProgress:  %i%% / Speed: %u MB/s\nCopied %.2fGo/%.2fGo", current_copied, total_bytes_copied * 100 / folder_size_current, tmpcnt / 1048576, (double)total_bytes_copied OCT_TO_GO, (double)folder_size_current OCT_TO_GO);
+
+				else if (tmpcnt >= 1024)
+					printf_notification("Copy of:\n%s \nProgress:  %i%% / Speed: %u KB/s\nCopied %.2fGo/%.2fGo", current_copied, total_bytes_copied * 100 / folder_size_current, tmpcnt / 1024, (double)total_bytes_copied OCT_TO_GO, (double)folder_size_current OCT_TO_GO);
+
+				else
+					printf_notification("Copy of:\n%s \nProgress:  %i%% / Speed: %u B/s\nCopied %.2fGo/%.2fGo", current_copied, total_bytes_copied * 100 / folder_size_current, tmpcnt, (double)total_bytes_copied OCT_TO_GO, (double)folder_size_current OCT_TO_GO);
 			}
 		}
 		else
-		{
 			t1 = 0;
-		}
 		f_sceKernelSleep(5);
 	}
 
 	return NULL;
 }
+void *sthread_func(void *arg)
+{
+	while (nthread_run)
+	{
+		if (isxfer)
+		{
+			tmpcnt = xfer_speed;
+			xfer_speed = 0;
+		}
+		f_sceKernelSleep(1);
+	}
+
+	return NULL;
+}
+
 int payload_main(struct payload_args *args)
 {
 	dlsym_t *dlsym = args->dlsym;
@@ -361,6 +400,7 @@ int payload_main(struct payload_args *args)
 	dlsym(libC, "strcpy", &f_strcpy);
 	dlsym(libC, "strncpy", &f_strncpy);
 	dlsym(libC, "sscanf", &f_sscanf);
+	dlsym(libC, "scanf", &f_scanf);
 	dlsym(libC, "malloc", &f_malloc);
 	dlsym(libC, "calloc", &f_calloc);
 	dlsym(libC, "strlen", &f_strlen);
@@ -370,7 +410,6 @@ int payload_main(struct payload_args *args)
 	dlsym(libC, "gmtime_s", &f_gmtime_s);
 	dlsym(libC, "time", &f_time);
 	dlsym(libC, "localtime", &f_localtime);
-
 	dlsym(libC, "closedir", &f_closedir);
 	dlsym(libC, "opendir", &f_opendir);
 	dlsym(libC, "readdir", &f_readdir);
@@ -381,6 +420,12 @@ int payload_main(struct payload_args *args)
 	dlsym(libC, "ftell", &f_ftell);
 	dlsym(libC, "fread", &f_fread);
 	dlsym(libC, "usleep", &f_usleep);
+	dlsym(libC, "fputs", &f_fputs);
+	dlsym(libC, "fgetc", &f_fgetc);
+	dlsym(libC, "feof", &f_feof);
+	dlsym(libC, "fprintf", &f_fprintf);
+	dlsym(libC, "realloc", &f_realloc);
+	dlsym(libC, "seekdir", &f_seekdir);
 
 	int libNetCtl = f_sceKernelLoadStartModule("libSceNetCtl.sprx", 0, 0, 0, 0, 0);
 	dlsym(libNetCtl, "sceNetCtlInit", &f_sceNetCtlInit);
@@ -388,7 +433,6 @@ int payload_main(struct payload_args *args)
 	dlsym(libNetCtl, "sceNetCtlGetInfo", &f_sceNetCtlGetInfo);
 
 	struct sockaddr_in server;
-
 	server.sin_len = sizeof(server);
 	server.sin_family = AF_INET;
 	server.sin_addr.s_addr = DEBUG_ADDR;
@@ -397,103 +441,157 @@ int payload_main(struct payload_args *args)
 	sock = f_sceNetSocket("debug", AF_INET, SOCK_STREAM, 0);
 	f_sceNetConnect(sock, (struct sockaddr *)&server, sizeof(server));
 
-	printf_notification("Welcome to PFSMNT-DUMPER V%s", VERSION);
-	f_sceKernelSleep(7);
+	char usb_mount_path[256], init_file_path[256], lang[3];
+	char title_id[64], out_dir_current[64], dest_path[1024];
 
-	int nb_folders_app0;
-	int nb_files_app0;
-	size_t total_app0 = 0;
-	char usb_name[256] = {0};
-	char usb_path[256] = {0};
-	char title_id[64];
-	char src_path[1024], dst_path[1024];
-
+	xfer_speed = 0;
 	isxfer = 0;
 	nthread_run = 1;
+	nthread_run_delete = 1;
 
 	ScePthread nthread;
 	f_scePthreadCreate(&nthread, NULL, nthread_func, NULL, "nthread");
-	if (wait_for_game(title_id) == 0)
+	ScePthread nthread2;
+	f_scePthreadCreate(&nthread2, NULL, nthread_delete, NULL, "nthreaddel");
+	ScePthread sthread;
+	f_scePthreadCreate(&sthread, NULL, sthread_func, NULL, "sthread");
+
+	printf_notification("Welcome to PFSMNT-DUMPER V%s", VERSION);
+	f_sceKernelSleep(7);
+
+	if (wait_for_game(title_id) != 1)
 	{
 		do
 		{
 			printf_notification("Please start the PSN Game and minimize it before running the payload...");
 			f_sceKernelSleep(7);
-		} while (wait_for_game(title_id) == 0);
+		} while (wait_for_game(title_id) != 1);
 	}
-
-	if (wait_for_usb(usb_name, usb_path) == 0)
+	char *usb_mnt_path = getusbpath();
+	if (usb_mnt_path == NULL)
 	{
 		do
 		{
 			printf_notification("Please insert USB media in exfat format");
 			f_sceKernelSleep(7);
-		} while (wait_for_usb(usb_name, usb_path) == 0);
+			usb_mnt_path = getusbpath();
+		} while (usb_mnt_path == NULL);
 	}
-
-	f_sprintf(src_path, "/mnt/sandbox/pfsmnt/%s-app0", title_id);
-	if (file_exists(src_path))
+	f_sprintf(usb_mount_path, "%s", usb_mnt_path);
+	f_free(usb_mnt_path);
+	f_sprintf(init_file_path, "%s/%s", usb_mount_path, INIT_FILE);
+	make_file_conf(init_file_path);
+	f_sprintf(error_file_path, "%s/%s", usb_mount_path, ERROR_FILE);
+	make_file_error(error_file_path);
+	char *langue = check_lang_in_conf_init(init_file_path);
+	f_sprintf(lang, "%s", langue);
+	f_free(langue);
+	if (lang != NULL)
 	{
-		f_sprintf(dir_curent, "%s-app0", title_id);
-		printf_notification("Calcul size of %s-app0", title_id);
-		printfsocket("src_path -> %s\n", src_path);
-
-		check_folder_size(src_path);
-		total_app0 = total_size_folder;
-		printfsocket("[FOLDER CONTENT] %s | FOLDER = %d | FILES = %ld | Size = %lu Octets\n", src_path, folders, files, total_app0);
+		printf_notification("Your selected language: %s", lang);
 		f_sceKernelSleep(7);
+		char(*ignored_lang)[3];
+		ignored_lang = f_malloc(32 * sizeof(*ignored_lang));
+		if (ignored_lang != NULL)
+		{
+			language_ignored(ignored_lang, lang);
+			f_sprintf(dest_path, "%s/%s", usb_mount_path, title_id);
+			if (dir_exists(dest_path))
+			{
+				printf_notification("Application already present on USB\n\nDeletion.Wait...");
+				f_sceKernelSleep(7);
+				isdel = 1;
+				if (!erase_folder(dest_path))
+					isdel = 0;
+				nthread_run_delete = 0;
+				f_sceKernelSleep(7);
+				if (!dir_exists(dest_path))
+				{
+					printf_notification("Application:\n\n%s\nDelete successfully.Wait...", dest_path);
+					f_sceKernelSleep(7);
+				}
+			}
 
-		f_sprintf(dst_path, "%s/%s/%s", usb_path, usb_name, title_id);
-		printfsocket("[Create Path]-> %s\n", dst_path);
-		f_mkdir(dst_path, 0777);
+			f_mkdir(dest_path, 0777);
 
-		f_sprintf(dst_path, "%s/%s-%s", dst_path, title_id, "app0");
-		printfsocket("[Create Folder]-> %s\n", dst_path);
-
-		printf_notification("Copy of %s \nStart...", dir_curent);
-		f_sceKernelSleep(7);
-
-		copy_dir(src_path, dst_path);
-
-		printf_notification("%s \nCopied", dir_curent);
-		f_sceKernelSleep(7);
+			char full[32] = "//FULL_DUMP";
+			int int_full = if_option(init_file_path, full);
+			char nest[32] = "//app0-nest";
+			int int_nest = if_option(init_file_path, nest);
+			if (int_full || int_nest)
+			{
+				if (int_full)
+					f_sprintf(dir_current, "%s", SANDBOX);
+				else if (int_nest)
+					f_sprintf(dir_current, "%s/%s-app0-nest", SANDBOX, title_id);
+				printfsocket("\n%s -> Selected", dir_current);
+				printf_notification("%s\n\nSelected!", dir_current);
+				f_sprintf(current_copied, dir_current);
+				f_sceKernelSleep(7);
+				check_current_folder(dir_current, ignored_lang);
+				f_sprintf(out_dir_current, "%s", dest_path);
+				printf_notification("Copy of\n\n%s\nStart...", dir_current);
+				f_sceKernelSleep(7);
+				copy_dir_current(dir_current, out_dir_current, ignored_lang);
+				if (!copy_verification(out_dir_current))
+					;
+			}
+			else
+			{
+				f_sprintf(dir_current, "%s/%s-app0", SANDBOX, title_id);
+				f_sprintf(current_copied, dir_current);
+				check_current_folder(dir_current, ignored_lang);
+				f_sprintf(out_dir_current, "%s/%s-app0", dest_path, title_id);
+				printf_notification("Copy of:\n\n%s\nStart...", dir_current);
+				f_sceKernelSleep(7);
+				copy_dir_current(dir_current, out_dir_current, ignored_lang);
+				f_sceKernelSleep(7);
+				if (copy_verification(out_dir_current) != 0)
+				{
+					f_sprintf(dir_current, "%s/%s-patch0", SANDBOX, title_id);
+					if (dir_exists(dir_current))
+					{
+						f_sprintf(current_copied, dir_current);
+						check_current_folder(dir_current, ignored_lang);
+						f_sprintf(out_dir_current, "%s/%s-patch0", dest_path, title_id);
+						printf_notification("Copy of:\n\n%s\nStart...", dir_current);
+						f_sceKernelSleep(7);
+						copy_dir_current(dir_current, out_dir_current, ignored_lang);
+						f_sceKernelSleep(7);
+						if (!copy_verification(out_dir_current))
+						{
+							char error[128] = "Failed to copy, see error file on usb";
+							printf_notification("%s", error);
+							write_error(error_file_path, error);
+							f_sceKernelSleep(7);
+						}
+					}
+					else
+					{
+						printf_notification("%s\nNot found", dir_current);
+						f_sceKernelSleep(7);
+					}
+				}
+			}
+		}
+		else
+		{
+			char error[128] = "Memory allocation error";
+			printf_notification("%s", error);
+			write_error(error_file_path, error);
+			f_sceKernelSleep(7);
+		}
+		f_free(ignored_lang);
 	}
-	nb_folders_app0 = folders;
-	nb_files_app0 = files;
-
-	total_size_folder = 0;
-	progress_total_by_folder = 0;
-
-	f_sprintf(src_path, "/mnt/sandbox/pfsmnt/%s-patch0", title_id);
-
-	if (file_exists(src_path))
+	else
 	{
-		folders = 0;
-		files = 0;
-		f_sprintf(dir_curent, "%s-patch0", title_id);
-		printf_notification("Calcul size of %s-patch0", title_id);
-		printfsocket("src_path -> %s\n", src_path);
-
-		check_folder_size(src_path);
-		printfsocket("[FOLDER CONTENT] %s | FOLDER = %d | FILES = %ld | Size = %lu Octets\n", src_path, folders, files, total_size_folder);
-		f_sceKernelSleep(7);
-
-		f_sprintf(dst_path, "%s/%s/%s/%s-%s", usb_path, usb_name, title_id, title_id, "patch0");
-		printfsocket("[Create Folder]-> %s\n", dst_path);
-
-		f_mkdir(dst_path, 0777);
-
-		printf_notification("Copy of %s \nStart...", dir_curent);
-		f_sceKernelSleep(7);
-
-		copy_dir(src_path, dst_path);
-
-		printf_notification("%s \nCopied", dir_curent);
+		char error[128] = "ERROR:\nIn the conf.ini file the language does\nnot match. Correct\n";
+		printf_notification("%s", error);
+		write_error(error_file_path, error);
 		f_sceKernelSleep(7);
 	}
-	printfsocket("[APP_CONTENT] %s | FOLDER = %d | FILES = %ld | Size = %lu Octets\n", title_id, nb_folders_app0 + folders, nb_files_app0 + files, total_size_folder + total_app0);
 	nthread_run = 0;
-
-	printfsocket("Copy END");
+	printf_notification("Goodbye!");
+	printfsocket("EXIT");
 	return 0;
 }

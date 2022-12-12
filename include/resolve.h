@@ -51,6 +51,7 @@ typeof(scePthreadJoin)* f_scePthreadJoin;
 
 typeof(sceKernelReboot)* f_sceKernelReboot;
 
+
 typeof(socket)* f_socket;
 typeof(bind)* f_bind;
 typeof(listen)* f_listen;
@@ -100,6 +101,8 @@ typeof(memcpy) * f_memcpy;
 typeof(strcpy) * f_strcpy;
 typeof(strncpy) * f_strncpy;
 typeof(sscanf) * f_sscanf;
+typeof(scanf) * f_scanf;
+
 typeof(malloc) * f_malloc;
 typeof(calloc) * f_calloc;
 typeof(strlen) * f_strlen;
@@ -120,6 +123,12 @@ typeof(fseek) * f_fseek;
 typeof(ftell) * f_ftell;
 typeof(fread) * f_fread;
 typeof(usleep) * f_usleep;
+typeof(fputs) * f_fputs;
+typeof(fgetc) * f_fgetc;
+typeof(feof) * f_feof;
+typeof(fprintf) * f_fprintf;
+typeof(realloc) * f_realloc;
+typeof(seekdir) * f_seekdir;
 
 #define sce_net_errno (*f_sceNetErrnoLoc())
 
