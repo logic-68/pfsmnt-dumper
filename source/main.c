@@ -1,6 +1,6 @@
 #include <utils.h>
 
-#define VERSION "1.0.4b"
+#define VERSION "1.0.3b"
 #define DEBUG_SOCKET
 #define DEBUG_ADDR IP(192, 168, 1, 155);
 #define DEBUG_PORT 5655
@@ -27,14 +27,17 @@ void copy_file(char *src_path, char *dst_path)
 		{
 			cfile = src_path;
 			isxfer = 1;
-			char *buffer = f_malloc(1024 * 64 * 64);
-			size_t bytes, bytes_size, bytes_copied = 0;
+			char *buffer = f_malloc(4194304);
+			
 			if (buffer != NULL)
 			{
+				size_t bytes, bytes_size, bytes_copied = 0;
+
 				f_lseek(src, 0L, SEEK_END);
 				bytes_size = f_lseek(src, 0, SEEK_CUR);
 				f_lseek(src, 0L, SEEK_SET);
-				while ((bytes = f_read(src, buffer, 1024 * 64 * 64)) > 0)
+
+				while ((bytes = f_read(src, buffer, 4194304)) > 0)
 				{
 					f_write(out, buffer, bytes);
 					bytes_copied += bytes;
@@ -47,11 +50,12 @@ void copy_file(char *src_path, char *dst_path)
 					xfer_pct = bytes_copied * 100 / bytes_size;
 					printfsocket("Copy of: %s | %i%% \n", cfile, xfer_pct);
 				}
+				f_free(buffer);
+
 				tmp_total_bytes_copied = tmp_total_bytes_copied + tmp_bytes_copied;
 				total_bytes_copied = tmp_total_bytes_copied;
 				printfsocket("[Total Progress] %i%% \n", total_bytes_copied * 100 / folder_size_current);
 			}
-			f_free(buffer);
 		}
 		f_close(out);
 		isxfer = 0;
@@ -60,14 +64,16 @@ void copy_file(char *src_path, char *dst_path)
 	f_close(src);
 }
 
+
 void copy_dir_current(char *dir_current, char *out_dir_current, char (*ignored_lang)[3])
 {
 	DIR *dir = f_opendir(dir_current);
 	struct dirent *dp;
 	struct stat info;
 	char src_path[1024], dst_path[1024], error[1024];
-	int attempt = 0;
-	int hasfound_lang = 0;
+	int attempt = -1;
+	int hasfound_lang = -1;
+
 	if (!dir)
 	{
 		return;
@@ -122,26 +128,25 @@ void copy_dir_current(char *dir_current, char *out_dir_current, char (*ignored_l
 							
 						if (file_compare(src_path, dst_path))
 						{
-							printfsocket("[COMPARE] = %d", file_compare(src_path, dst_path));
 							tmp_files++;
 						}
 						else
 						{
-							if (attempt == 0)
+							if ( attempt == -1)
 							{
 								total_bytes_copied = (tmp_total_bytes_copied - tmp_bytes_copied);
 								f_sprintf(error, "[ATTEMPT TO WRITE FILE] because file do not match ->  %s\n", dst_path);
 								printfsocket(error);
 								write_error(error_file_path, error);
-								attempt = 1;
+								attempt = 0;
 								copy_file(src_path, dst_path);
 							}
-							else if (attempt == 1)
+							else if (!file_compare(src_path, dst_path) && attempt == 0)
 							{
 								f_sprintf(error, "[REWRITE ATTEMPT FAILED] Maybe more free space on your usb drive?.\n[FILE IGNORE] -> %s\n\n", src_path);
 								printfsocket(error);
 								write_error(error_file_path, error);
-								attempt = 0;
+								attempt = -1;
 							}
 						}
 					}
