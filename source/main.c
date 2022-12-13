@@ -17,7 +17,7 @@ size_t folder_size_current, tmp_bytes_copied, total_bytes_copied, tmp_total_byte
 char dir_current[64], current_copied[64];
 char *cfile, error_file_path[256];
 
-void copy_file(char *src_path, char *dst_path, char *name)
+void copy_file(char *src_path, char *dst_path)
 {
 	int src = f_open(src_path, O_RDONLY, 0);
 	if (src != -1)
@@ -50,14 +50,14 @@ void copy_file(char *src_path, char *dst_path, char *name)
 				tmp_total_bytes_copied = tmp_total_bytes_copied + tmp_bytes_copied;
 				total_bytes_copied = tmp_total_bytes_copied;
 				printfsocket("[Total Progress] %i%% \n", total_bytes_copied * 100 / folder_size_current);
-				f_free(buffer);
 			}
-			f_close(out);
-			isxfer = 0;
-			xfer_pct = 0;
+			f_free(buffer);
 		}
-		f_close(src);
+		f_close(out);
+		isxfer = 0;
+		xfer_pct = 0;
 	}
+	f_close(src);
 }
 
 void copy_dir_current(char *dir_current, char *out_dir_current, char (*ignored_lang)[3])
@@ -66,7 +66,8 @@ void copy_dir_current(char *dir_current, char *out_dir_current, char (*ignored_l
 	struct dirent *dp;
 	struct stat info;
 	char src_path[1024], dst_path[1024], error[1024];
-	int attempt, hasfound_lang = 0;
+	int attempt = 0;
+	int hasfound_lang = 0;
 	if (!dir)
 	{
 		return;
@@ -112,26 +113,30 @@ void copy_dir_current(char *dir_current, char *out_dir_current, char (*ignored_l
 							}
 							// if the language extension is not to be ignored
 							if (hasfound_lang != 0)
-								copy_file(src_path, dst_path, dp->d_name);
-						}
-						// if no extension
-						else
-							copy_file(src_path, dst_path, dp->d_name);
-						if (file_compare(src_path, dst_path))
-							tmp_files++;
+								copy_file(src_path, dst_path);
+						}// if no extension
 						else
 						{
-							if (!file_compare(src_path, dst_path) && attempt == 0)
+							copy_file(src_path, dst_path);
+						}
+							
+						if (file_compare(src_path, dst_path))
+						{
+							printfsocket("[COMPARE] = %d", file_compare(src_path, dst_path));
+							tmp_files++;
+						}
+						else
+						{
+							if (attempt == 0)
 							{
 								total_bytes_copied = (tmp_total_bytes_copied - tmp_bytes_copied);
 								f_sprintf(error, "[ATTEMPT TO WRITE FILE] because file do not match ->  %s\n", dst_path);
 								printfsocket(error);
 								write_error(error_file_path, error);
 								attempt = 1;
-								copy_file(src_path, dst_path, dp->d_name);
+								copy_file(src_path, dst_path);
 							}
-
-							if (!file_compare(src_path, dst_path) && attempt == 1)
+							else if (attempt == 1)
 							{
 								f_sprintf(error, "[REWRITE ATTEMPT FAILED] Maybe more free space on your usb drive?.\n[FILE IGNORE] -> %s\n\n", src_path);
 								printfsocket(error);
@@ -484,7 +489,6 @@ int payload_main(struct payload_args *args)
 	make_file_error(error_file_path);
 	char *langue = check_lang_in_conf_init(init_file_path);
 	f_sprintf(lang, "%s", langue);
-	
 
 	if (langue != NULL)
 	{
