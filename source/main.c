@@ -1,6 +1,6 @@
 #include <utils.h>
 
-#define VERSION "1.0.3b"
+#define VERSION "1.0.4b"
 #define DEBUG_SOCKET
 #define DEBUG_ADDR IP(192, 168, 1, 155);
 #define DEBUG_PORT 5655
@@ -302,7 +302,6 @@ void *nthread_func(void *arg)
 
 				else if (tmpcnt >= 1024)
 					printf_notification("Copy of:\n%s \nProgress:  %i%% / Speed: %u KB/s\nCopied %.2fGo/%.2fGo", current_copied, total_bytes_copied * 100 / folder_size_current, tmpcnt / 1024, (double)total_bytes_copied OCT_TO_GO, (double)folder_size_current OCT_TO_GO);
-
 				else
 					printf_notification("Copy of:\n%s \nProgress:  %i%% / Speed: %u B/s\nCopied %.2fGo/%.2fGo", current_copied, total_bytes_copied * 100 / folder_size_current, tmpcnt, (double)total_bytes_copied OCT_TO_GO, (double)folder_size_current OCT_TO_GO);
 			}
@@ -485,9 +484,11 @@ int payload_main(struct payload_args *args)
 	make_file_error(error_file_path);
 	char *langue = check_lang_in_conf_init(init_file_path);
 	f_sprintf(lang, "%s", langue);
-	f_free(langue);
-	if (lang != NULL)
+	
+
+	if (langue != NULL)
 	{
+		f_free(langue);
 		printf_notification("Your selected language: %s", lang);
 		f_sceKernelSleep(7);
 		char(*ignored_lang)[3];
@@ -585,6 +586,7 @@ int payload_main(struct payload_args *args)
 	}
 	else
 	{
+		f_free(langue);
 		char error[128] = "ERROR:\nIn the conf.ini file the language does\nnot match. Correct\n";
 		printf_notification("%s", error);
 		write_error(error_file_path, error);

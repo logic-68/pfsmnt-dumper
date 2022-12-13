@@ -17,7 +17,7 @@ void make_file_error(char *error_file_path);
 void make_file_conf(char *init_file_path);
 void init_lang(char *usb_mount_path);
 void touch_file(char *destfile);
-char *check_lang_in_conf_init();
+char *check_lang_in_conf_init(char *init_file_path);
 char *getusbpath();
 int substring(char *haystack, char *needle);
 int file_compare(char *fname1, char *fname2);

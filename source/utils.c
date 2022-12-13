@@ -89,7 +89,7 @@ void make_file_conf(char *init_file_path)
     {
         int ini = f_open(init_file_path, O_WRONLY | O_CREAT | O_TRUNC, 0777);
         char *buffer;
-        buffer = "uncomment the line below for a full backup of pfsmnt\r\n//FULL_DUMP\r\n\r\nuncomment the line below for a backup of the app0-nest folder\r\napp0-nest\r\n\r\nEdit the line below with your current system language:\r\nus,se,ru,pt,pl,no,nl,la,jp,it,fr,fi,es,dk,de,br,ar\r\nLANGUAGE=fr";
+        buffer = "uncomment the line below for a full backup of pfsmnt\r\n//FULL_DUMP\r\n\r\nuncomment the line below for a backup of the app0-nest folder\r\n//app0-nest\r\n\r\nEdit the line below with your current system language:\r\nus,se,ru,pt,pl,no,nl,la,jp,it,fr,fi,es,dk,de,br,ar\r\nLANGUAGE=fr";
         f_write(ini, buffer, f_strlen(buffer));
         f_close(ini);
         printf_notification("Generated conf.in file.\nYou can change the default language.\nWait 20s...");
