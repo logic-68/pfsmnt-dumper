@@ -31,11 +31,10 @@ OR app0-nest only
 - Pure code
 - Correction of an oversight (during the tests)
 
-
-- You can follow the process with netcat ( nc64.exe -l -p 5655 -v )
-- Good dump thank you for your feedback (once again I unfortunately do not have an accessible game to perform all the tests myself)
-
-
+# update 1.0.4
+- Backup of the pkg file now possible (/user/app/Title_ID/app.pkg)
+- Backup of directory appmeta now possible (/user/appmeta/Title_ID)
+- error_log.txt file becomes a log.txt file. Should list which last file fails (game requiring login, to finish installing or something like that)
 
 
 # Credits
